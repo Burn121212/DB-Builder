@@ -36,7 +36,7 @@ Include blank column (between amount and taxonomy):
     1    ->    yes
 
 Example:
-python snakes/dbbuilder_build_krona.py ~/atlas/dbbuilder/db_test FINAL_DB/Final_Database_species_only_fungi_p1.0.csv Krona_format_species_only_fungi_p1.0_zOTU.csv fungi_zOTU_p1.0 1
+python snakes/dbbuilder_build_krona.py ~/atlas/dbbuilder/db_test FINAL_DB/Final_Database_species_only_fungi_p0.8.csv Krona_format_species_only_fungi_p0.8_zOTU.csv fungi_zOTU_p0.8 1
     """)
     sys.exit()
 

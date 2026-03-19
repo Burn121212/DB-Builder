@@ -1,4 +1,4 @@
-# ==================== ATLASMX ITS — DB BUILDER V9.1 FULL PIPELINE (PART 1) ====================
+# ==================== ATLASMX ITS — DB BUILDER V9.1 FULL PIPELINE (PART 1 + PART 2 + FOR_R EXPORT) ====================
 #
 # PART 1 (Concatenation):
 # 1) Abundance table is MASTER (only OTUs present there are kept).

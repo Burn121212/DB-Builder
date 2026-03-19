@@ -1,4 +1,4 @@
-name: pandas
+name: itsqc_pylibs
 channels:
   - anaconda
   - defaults
