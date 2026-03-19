@@ -46,6 +46,11 @@ def discover_datasets(input_dir: Path) -> dict:
 # PARSE COMMAND AND SET VARIABLES
 # =========================================================
 
+# greet
+print("=" * 70)
+print("🚀 ATLASMX ITS — DB BUILDER V9.1")
+print("=" * 70)
+
 # minimal required arguments
 querydir = Path(config["input_directory"]).expanduser().resolve()
 outdir = Path(config["output_directory"]).expanduser().resolve()
@@ -59,8 +64,8 @@ pvalue_threshold = float(config.get('p-value_threshold', 1.0))
 
 # optional arguments with default options
 # for subset by taxonomy
-taxonomic_rank = config.get('taxonomic_rank', 'species')
-taxonomic_filter = config.get('taxonomic_rank', 'None') # cannot be none
+taxonomic_rank = config.get('taxonomic_rank', 'None') #  defines  if subset script is run or not
+taxonomic_filter = config.get('taxonomic_filter', 'None') # defines  if subset script is run or not
 remove_prefix = config.get('remove_prefix', 'None')
 tax_filter_mode = config.get('tax_filter_mode', 'exact')
 dataset_name = config.get('dataset_name', 'concatenated_DB')
@@ -69,25 +74,57 @@ dataset_name = config.get('dataset_name', 'concatenated_DB')
 # for build krona
 include_blank_column = config.get('include_blank_column', '1')
 
+# define directory names for build_r output
+collapse_tag = f"p{pvalue_threshold}".replace(".", "p")
+SPPN_P_THRESHOLD = 0.8 # hard coded in scripts
+sppn_tag = f"sppn{SPPN_P_THRESHOLD}".replace(".", "p")
+R_SUFFIX = f"_{collapse_strategy}_{collapse_tag}_{sppn_tag}"
+
+# print parameters
+print("=" * 70)
+print(f"PARAMETERS")
+print(f"mode: {collapse_mode}")
+print(f'strategy: {collapse_strategy}')
+print(f"collapse p ≥ {pvalue_threshold}")
+print(f'sanitize p ≥ {SPPN_P_THRESHOLD}')
+print("=" * 70)
+
 # =========================================================
 # RULE ALL
 # =========================================================
 
-rule all:
-    input:
-        expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE), # concatenate
-        str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv", # collapse
-        # str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.csv", # subset #### optional
-        # str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.fasta", # subset #### optional
-        str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
+if taxonomic_filter != 'None' and taxonomic_rank != 'None':
+    rule all:
+        input:
+            expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE), # concatenate
+            str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv", # collapse
+            str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.csv", # subset 
+            str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.fasta", # subset 
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/taxonomy.csv", # build r
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/abundance_table.csv", # build r
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/sequences.fasta", # build r
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/fungal_traits_table.csv", # build r
+            str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
+else:
+    rule all:
+        input:
+            expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE), # concatenate
+            str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv", # collapse
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/taxonomy.csv", # build r
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/abundance_table.csv", # build r
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/sequences.fasta", # build r
+            str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/fungal_traits_table.csv", # build r
+            str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
 
 # =========================================================
 # RULES
 # =========================================================
 
+    
 rule run_concatenate:
     """ dbbuilder_concatenate.py README:
 ATLASMX ITS — DB BUILDER V9.1
+CONCATENATE DATASETS
 
 Usage:
 dbbuilder_concatenation.py <input_directory> <output_prefix> <dataset>
@@ -129,10 +166,15 @@ PART 1 (Concatenation):
         """
         python snakes/dbbuilder_concatenate.py {params[0]} {params[1]} {params[2]}
         """
-####
+
+    
+# =========================================================
     
 rule run_collapse:
     """ dbbuilder_collapse.py README:
+ATLASMX ITS — DB BUILDER V9.1
+COLLAPSE DATASETS
+
 Usage:
 dbbuilder_collapse.py <output_prefix> <collapse_mode> <collapse_strategy> <p-value_threshold>
 
@@ -175,7 +217,6 @@ Details:
      - FINAL_DB/Final_Database_<strategy>_all_eukaryotes_p{P_VALUE_THRESHOLD}.csv   (when MODE=all_eukaryotes)
      - FINAL_DB/Final_Database_<strategy>_fungi_p{P_VALUE_THRESHOLD}.csv             (subset from all-euk OR main when MODE=fungi)
 
-
  NOTE:
  - MODE controls which tables are used for collapse in Part 2.
  - Regardless of MODE, if MODE="all_eukaryotes" we also export a fungi-only final DB + its For_R package.
@@ -199,12 +240,74 @@ Details:
         python snakes/dbbuilder_collapse.py {params[0]} {params[1]} {params[2]} {params[3]}
         """
 
-####
+            
+# =========================================================
     
+rule run_build_r:
+    """ dbbuilder_build_r.py README:
+ATLASMX ITS — DB BUILDER V9.1
+BUILD DATA FOR R
+
+Usage:
+dbbuilder_build_r.py <input_directory> <output_prefix> <collapse_mode> <collapse_strategy> <p-value_threshold>
+
+Output prefix:
+    string indicating the path for the DBBuilder output, for example "~/atlas/dbbuilder/db_test"
+Collapse mode:
+   "fungi"          -> collapse only fungi tables
+   "all_eukaryotes" -> collapse full unfiltered tables (all eukaryotes)
+Collapse strategy:
+   "species_only" -> collapse only when species exists and species_pvalue >= P_VALUE_THRESHOLD
+   "genus"        -> collapse only when genus exists and genus_pvalue >= P_VALUE_THRESHOLD
+   "all"          -> recursive lowest-rank collapse:
+                     species -> genus -> family -> order -> class -> phylum -> domain
+                     using the deepest available rank with p >= P_VALUE_THRESHOLD
+p-value threshold:
+    1.00    ->    very strict
+    0.00    ->    similar to vsearch OTU 97%
+    
+Example:
+python snakes/dbbuilder_build_r.py ~/atlas/dbbuilder/db_test all_eukaryotes species_only 1.0
+
+Details:
+PART 3 (For_R export):
+12) Create For_R/ folder with phyloseq-ready files for each final DB produced:
+    For_R/<tag>/taxonomy.csv
+    For_R/<tag>/abundance_table.csv
+    For_R/<tag>/sequences.fasta
+    For_R/<tag>/fungal_traits_table.csv
+
+NOTE:
+- MODE controls which tables are used for collapse in Part 2.
+- Regardless of MODE, if MODE="all_eukaryotes" we also export a fungi-only final DB + its For_R package.
+- For_R folder names are strategy-specific and threshold-specific to avoid overwriting.
+    """
+    conda:
+        "snakes/pandas.yaml"
+    input:
+         str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv", # collapse
+    output:
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/taxonomy.csv", # build r
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/abundance_table.csv", # build r
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/sequences.fasta", # build r
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/fungal_traits_table.csv" # build r
+    params:
+        str(outdir),
+        collapse_mode,
+        collapse_strategy,
+        f'{pvalue_threshold}'
+    shell:
+        """
+        python snakes/dbbuilder_build_r.py {params[0]} {params[1]} {params[2]} {params[3]}
+        """
+
+            
+# =========================================================
+            
 rule run_subset:
     """ dbbuilder_subset_by_taxonomy.py README
 ATLASMX ITS — DB BUILDER V9.1
-SUBSET BY TAXONOMY + PRUNE (OTUs & SITES) + DROP INPUT LIFESTYLES + MERGE FULL FUNGAL TRAITS
+SUBSET DATASET
 
 Usage:
 dbbuilder_subset_by_taxonomy.py <output_prefix> <input_file_name> <taxonomic_rank> <taxonomic_filter> <output_name> <suffix_total_abundance> <remove_prefix> <tax_filter_mode>
@@ -248,18 +351,21 @@ where primary_lifestyle & Secondary_lifestyle come ONLY from traits.
         str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.csv", # subset 
         str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.fasta" # subset 
     params:
-        ' '.join([str(outdir),
+        str(outdir),
         f"FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv",
         taxonomic_rank,
         taxonomic_filter,
         f'{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}',
         f'{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}',
         remove_prefix,
-        tax_filter_mode])
+        tax_filter_mode
     shell:
         """
-        python snakes/dbbuilder_subset_by_taxonomy.py {params}
+        python snakes/dbbuilder_subset_by_taxonomy.py {params[0]} {params[1]} {params[2]} {params[3]} {params[4]} {params[5]} {params[6]} {params[7]}
         """
+
+            
+# =========================================================
 
 rule run_krona:
     """ dbbuilder_build_krona.py README
