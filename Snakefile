@@ -75,24 +75,67 @@ include_blank_column = config.get('include_blank_column', '1')
 
 rule all:
     input:
+        expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE), # concatenate
         str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv", # collapse
-        str(outdir) + f"/FINAL_DB/Collapse_Log_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.txt", # collapse
-        expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE), # collapse
+        # str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.csv", # subset #### optional
+        # str(outdir) + f"/subset/{dataset_name}_subset_{taxonomic_rank}_{taxonomic_filter}_p{pvalue_threshold}.fasta", # subset #### optional
         str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
 
 # =========================================================
 # RULES
 # =========================================================
 
-rule run_collapse:
+rule run_concatenate:
     """ dbbuilder_concatenate.py README:
 ATLASMX ITS — DB BUILDER V9.1
 
 Usage:
-dbbuilder_concatenation.py <input_directory> <output_prefix> <collapse_mode> <collapse_strategy> <p-value_threshold>
+dbbuilder_concatenation.py <input_directory> <output_prefix> <dataset>
 
 Input directory:
     string indicating the path of the input data, for example "~/atlas/dbbuilder/to_build/input"
+Output prefix:
+    string indicating the path for the DBBuilder output, for example "~/atlas/dbbuilder/db_test"
+Dataset:
+    string indicating the prefix for the dataset to analyze, for example "ATLASMXC"
+
+Example:
+python snakes/dbbuilder_concatenate.py ~/atlas/dbbuilder/to_build/input/ ~/atlas/dbbuilder/db_test ATLASMXC
+
+Details:
+PART 1 (Concatenation):
+1) Abundance table is MASTER (only OTUs present there are kept).
+2) Join taxonomy (SINTAX) + sequences (FASTA).
+3) Save:
+   - concatenated_tables/<PREFIX>_concatenated.csv
+   - concatenated_tables/Fungi_concatenated/<PREFIX>_fungi.csv
+   - concatenated_tables/Non_annotated/<PREFIX>_non_annotated.csv
+   - concatenated_tables/AllEuk_concatenated/<PREFIX>_all_eukaryotes.csv   (UNFILTERED full table)
+
+    """
+    conda:
+        "snakes/pandas.yaml"
+    input:
+        str(querydir) + "/{lbase}_otu_abundance_table.csv",
+        str(querydir) + "/{lbase}_sequences.fasta", 
+        str(querydir) + "/{lbase}_taxonomy.sintax.txt"
+    output:
+        str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv" # collapse
+    params:
+        str(querydir),
+        str(outdir),
+        '{lbase}'
+    shell:
+        """
+        python snakes/dbbuilder_concatenate.py {params[0]} {params[1]} {params[2]}
+        """
+####
+    
+rule run_collapse:
+    """ dbbuilder_collapse.py README:
+Usage:
+dbbuilder_collapse.py <output_prefix> <collapse_mode> <collapse_strategy> <p-value_threshold>
+
 Output prefix:
     string indicating the path for the DBBuilder output, for example "~/atlas/dbbuilder/db_test"
 Collapse mode:
@@ -109,115 +152,55 @@ p-value threshold:
     0.00    ->    similar to vsearch OTU 97%
     
 Example:
-python snakes/dbbuilder_concatenate.py ~/atlas/dbbuilder/to_build/input/ ~/atlas/dbbuilder/db_test all_eukaryotes species_only 0.8
+python snakes/dbbuilder_collapse.py ~/atlas/dbbuilder/db_test all_eukaryotes species_only 1.0
 
 Details:
-PART 1 (Concatenation):
-1) Abundance table is MASTER (only OTUs present there are kept).
-2) Join taxonomy (SINTAX) + sequences (FASTA).
-3) Save:
-   - concatenated_tables/<PREFIX>_concatenated.csv
-   - concatenated_tables/Fungi_concatenated/<PREFIX>_fungi.csv
-   - concatenated_tables/Non_annotated/<PREFIX>_non_annotated.csv
-   - concatenated_tables/AllEuk_concatenated/<PREFIX>_all_eukaryotes.csv   (UNFILTERED full table)
+ 
+ PART 2 (Taxonomic collapse + final DB):
+ 4) Collapse according to COLLAPSE_STRATEGY:
+    - "species_only" -> collapse only when species p >= P_VALUE_THRESHOLD
+    - "genus"        -> collapse only when genus p >= P_VALUE_THRESHOLD
+    - "all"          -> recursive lowest-rank collapse using the deepest available rank
+                        with p >= P_VALUE_THRESHOLD among:
+                        species -> genus -> family -> order -> class -> phylum -> domain
+ 5) Representative is chosen ONLY among rows with COMPLETE taxonomy (d,p,c,o,f,g,s);
+    among those, the longest sequence is kept.
+ 6) Sum abundances across sites.
+ 7) Compute Total_Abundance, sort, and build binomial species names.
+ 8) SANITIZE taxonomy columns by p >= SPPN_P_THRESHOLD
+    (fix SINTAX cases where names remain despite low confidence).
+ 9) Add fungal lifestyles (Fungal_Traits_DB) after sanitization.
+ 10) Assign SPPN (deepest rank with p >= SPPN_P_THRESHOLD), prune zeros.
+ 11) Save final DB CSVs with strategy and p-value in the filename:
+     - FINAL_DB/Final_Database_<strategy>_all_eukaryotes_p{P_VALUE_THRESHOLD}.csv   (when MODE=all_eukaryotes)
+     - FINAL_DB/Final_Database_<strategy>_fungi_p{P_VALUE_THRESHOLD}.csv             (subset from all-euk OR main when MODE=fungi)
 
-PART 2 (Taxonomic collapse + final DB):
-4) Collapse according to COLLAPSE_STRATEGY:
-   - "species_only" -> collapse only when species p >= P_VALUE_THRESHOLD
-   - "genus"        -> collapse only when genus p >= P_VALUE_THRESHOLD
-   - "all"          -> recursive lowest-rank collapse using the deepest available rank
-                       with p >= P_VALUE_THRESHOLD among:
-                       species -> genus -> family -> order -> class -> phylum -> domain
-5) Representative is chosen ONLY among rows with COMPLETE taxonomy (d,p,c,o,f,g,s);
-   among those, the longest sequence is kept.
-6) Sum abundances across sites.
-7) Compute Total_Abundance, sort, and build binomial species names.
-8) SANITIZE taxonomy columns by p >= SPPN_P_THRESHOLD
-   (fix SINTAX cases where names remain despite low confidence).
-9) Add fungal lifestyles (Fungal_Traits_DB) after sanitization.
-10) Assign SPPN (deepest rank with p >= SPPN_P_THRESHOLD), prune zeros.
-11) Save final DB CSVs with strategy and p-value in the filename:
-    - FINAL_DB/Final_Database_<strategy>_all_eukaryotes_p{P_VALUE_THRESHOLD}.csv   (when MODE=all_eukaryotes)
-    - FINAL_DB/Final_Database_<strategy>_fungi_p{P_VALUE_THRESHOLD}.csv             (subset from all-euk OR main when MODE=fungi)
 
-PART 3 (For_R export):
-12) Create For_R/ folder with phyloseq-ready files for each final DB produced:
-    For_R/<tag>/taxonomy.csv
-    For_R/<tag>/abundance_table.csv
-    For_R/<tag>/sequences.fasta
-    For_R/<tag>/fungal_traits_table.csv
-
-NOTE:
-- MODE controls which tables are used for collapse in Part 2.
-- Regardless of MODE, if MODE="all_eukaryotes" we also export a fungi-only final DB + its For_R package.
-- This version preserves the original conservative logic for representative selection:
-  a group is collapsed only if at least one row in that group has COMPLETE taxonomy.
-  Otherwise, the group is left uncollapsed.
-- For_R folder names are strategy-specific and threshold-specific to avoid overwriting.
+ NOTE:
+ - MODE controls which tables are used for collapse in Part 2.
+ - Regardless of MODE, if MODE="all_eukaryotes" we also export a fungi-only final DB + its For_R package.
+ - This version preserves the original conservative logic for representative selection:
+   a group is collapsed only if at least one row in that group has COMPLETE taxonomy.
+   Otherwise, the group is left uncollapsed.
     """
     conda:
         "snakes/pandas.yaml"
     input:
-        expand(str(querydir) + "/{lbase}_otu_abundance_table.csv", lbase=LOCBASE),
-        expand(str(querydir) + "/{lbase}_sequences.fasta", lbase=LOCBASE),
-        expand(str(querydir) + "/{lbase}_taxonomy.sintax.txt", lbase=LOCBASE)
+        expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE)
     output:
         str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv", # collapse
-        str(outdir) + f"/FINAL_DB/Collapse_Log_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.txt", # collapse
-        expand(str(outdir) + "/concatenated_tables/{lbase}_concatenated.csv", lbase=LOCBASE) # collapse
     params:
-        ' '.join([str(querydir),
         str(outdir),
         collapse_mode,
         collapse_strategy,
-        f'{pvalue_threshold}'])
+        f'{pvalue_threshold}'
     shell:
         """
-        python snakes/dbbuilder_concatenate.py {params}
+        python snakes/dbbuilder_collapse.py {params[0]} {params[1]} {params[2]} {params[3]}
         """
 
-
-rule run_krona:
-    """ dbbuilder_build_krona.py README
-ATLASMX ITS — DB BUILDER V9.1
-BUILD KRONA
-
-Usage:
-dbbuilder_build_krona.py <output_prefix> <input_file_name> <output_name> <dataset_name> <include_blank_column>
-
-Output prefix:
-    string indicating the path of the DBBuilder output, for example "~/atlas/dbbuilder/db_test"
-Input file name:
-    string for the input file, for example "FINAL_DB/Final_Database_species_only_fungi_p0.8.csv"
-Output name:
-    string for output  file name, for example "Krona_format_species_only_fungi_p0.8_zOTU.csv"
-Dataset name:
-    string to repeat in the first column, for example "fungi_zOTU_p0.8"
-Include blank column (between amount and taxonomy):
-    0    ->    no
-    1    ->    yes
-
-Example:
-python snakes/dbbuilder_build_krona.py ~/atlas/dbbuilder/db_test FINAL_DB/Final_Database_species_only_fungi_p0.8.csv Krona_format_species_only_fungi_p0.8_zOTU.csv fungi_zOTU_p0.8 1
-    """
-    conda:
-        "snakes/pandas.yaml"
-    input:
-        str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # collapse
-    output:
-        str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
-    params:
-        ' '.join([str(outdir),
-        f"FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv",
-        f"{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv",
-        dataset_name,
-        include_blank_column])
-    shell:
-        """
-        python snakes/dbbuilder_build_krona.py {params}
-        """
-
-
+####
+    
 rule run_subset:
     """ dbbuilder_subset_by_taxonomy.py README
 ATLASMX ITS — DB BUILDER V9.1
@@ -276,4 +259,44 @@ where primary_lifestyle & Secondary_lifestyle come ONLY from traits.
     shell:
         """
         python snakes/dbbuilder_subset_by_taxonomy.py {params}
+        """
+
+rule run_krona:
+    """ dbbuilder_build_krona.py README
+ATLASMX ITS — DB BUILDER V9.1
+BUILD KRONA
+
+Usage:
+dbbuilder_build_krona.py <output_prefix> <input_file_name> <output_name> <dataset_name> <include_blank_column>
+
+Output prefix:
+    string indicating the path of the DBBuilder output, for example "~/atlas/dbbuilder/db_test"
+Input file name:
+    string for the input file, for example "FINAL_DB/Final_Database_species_only_fungi_p0.8.csv"
+Output name:
+    string for output  file name, for example "Krona_format_species_only_fungi_p0.8_zOTU.csv"
+Dataset name:
+    string to repeat in the first column, for example "fungi_zOTU_p0.8"
+Include blank column (between amount and taxonomy):
+    0    ->    no
+    1    ->    yes
+
+Example:
+python snakes/dbbuilder_build_krona.py ~/atlas/dbbuilder/db_test FINAL_DB/Final_Database_species_only_fungi_p0.8.csv Krona_format_species_only_fungi_p0.8_zOTU.csv fungi_zOTU_p0.8 1
+    """
+    conda:
+        "snakes/pandas.yaml"
+    input:
+        str(outdir) + f"/FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # collapse
+    output:
+        str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
+    params:
+        ' '.join([str(outdir),
+        f"FINAL_DB/Final_Database_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv",
+        f"{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv",
+        dataset_name,
+        include_blank_column])
+    shell:
+        """
+        python snakes/dbbuilder_build_krona.py {params}
         """
