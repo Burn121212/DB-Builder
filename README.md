@@ -152,7 +152,7 @@ Run the workflow:
 snakemake --cores 4 --use-conda --config input_directory="~/my_dataset/dbbuild_input" output_directory="~/my_dataset/dbbuild_out"
 ```
 
-Run the workflow and retrieve a subset for a specific taxon:
+Run the workflow and retrieve a subset for a specific taxon. If the results of the main workflow are already available, then this command will only retreieve a subset:
 
 ```bash
 snakemake --cores 4 --use-conda --config input_directory="~/my_dataset/dbbuild_input" output_directory="~/my_dataset/dbbuild_out" taxonomic_rank="family" taxonomic_filter="Amanitaceae"
