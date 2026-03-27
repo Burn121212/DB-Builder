@@ -8,7 +8,7 @@ DB-Builder is a reproducible Snakemake-based pipeline for integrating metabarcod
 
 ## 📑 Table of Contents
 
-* [Workflow](#workflow)
+* [Workflow](#⚙️-workflow)
 * [Installation](#installation)
 * [Usage](#usage)
 * [Input](#input)
@@ -108,12 +108,6 @@ Create environment:
 ```bash
 conda create -c conda-forge -c bioconda -n dbbuilder snakemake
 conda activate dbbuilder
-```
-
-(Optional but recommended):
-
-```bash
-conda config --set channel_priority strict
 ```
 
 ---
