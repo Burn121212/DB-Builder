@@ -8,14 +8,14 @@ DB-Builder is a reproducible Snakemake-based pipeline for integrating metabarcod
 
 ## 📑 Table of Contents
 
-* [Workflow](#⚙️-workflow)
-* [Installation](#installation)
-* [Usage](#usage)
-* [Input](#input)
-* [Output](#output)
-* [Pipeline Details](#pipeline-details)
-* [Common Issues](#common-issues)
-* [License](#license)
+* [Workflow](#-workflow)
+* [Installation](#-installation)
+* [Usage](#-usage)
+* [Input](#-input)
+* [Output](#-output)
+* [Pipeline Details](#-pipeline-details)
+* [Common Issues](#-common-issues)
+* [License](#-license)
 
 ---
 
