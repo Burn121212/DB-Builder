@@ -34,7 +34,8 @@ args <- commandArgs(trailingOnly = TRUE)
 
 input_dir  <- file.path(args[1])
 output_dir <- file.path(args[2])
-color_vars <- args[3]
+sample_metadata <- file.path(args[3])
+color_vars <- args[4]
 
 if (is.na(color_vars)) {
     text_lines <- paste("",
@@ -42,20 +43,20 @@ if (is.na(color_vars)) {
                         "",
                         "build_phyloseq_zOTU_genus_prev2_multiNMDS.R",
                         "",
-                        "Usage: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R <input_directory> <output_directory> <color_vars>",
+                        "Usage: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R <input_directory> <output_directory> <sample_metadata> <color_vars>",
                         "",
                         "Input directory",
                         '    String indicating the path of the input directory, for example "input"',
                         "Output directory",
                         '    String indicating the path of the output directory, for example "output"',
+                        "Sample metadata",
+                        '    String indicating the path of the sample metadata table, for example "smd/sample_metadata.csv"',
                         "Color variables",
-                        '    String or list separated by commas to color NMDS, for example "ecoregion_WWF" or "ecoregion_WWF,vegetation_CONABIO"',
+                        '    String or list separated by commas to color NMDS, for example "ecoregion_WWF" or "ecoregion_WWF,sequencing_platform"',
                         "",
-                        "Example: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R input output ecoregion_WWF,vegetation_CONABIO",
+                        "Example: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R input output md/sample_metadata.csv ecoregion_WWF,sequencing_platform",
                         "",
-                        
                         sep = "\n")
-    cat(text_lines)
     quit()
 }
          
@@ -82,7 +83,7 @@ library(ggplot2)
 abundance_file <- file.path(input_dir, "abundance_table.csv")
 traits_file    <- file.path(input_dir, "fungal_traits_table.csv")
 taxonomy_file  <- file.path(input_dir, "taxonomy.csv")
-metadata_file  <- file.path(input_dir, "sample_metadata.csv")
+metadata_file  <- sample_metadata
 
 files_to_check <- c(abundance_file, traits_file, taxonomy_file, metadata_file)
 missing_files <- files_to_check[!file.exists(files_to_check)]
