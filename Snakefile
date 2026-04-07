@@ -6,7 +6,9 @@ import subprocess
 import glob
 import os
 import pathlib
+import sys
 from collections import defaultdict
+import logging
 
 # =========================================================
 # FUNCTIONS
@@ -37,19 +39,26 @@ def discover_datasets(input_dir: Path) -> dict:
         missing = required - set(files.keys())
         if not missing:
             complete[prefix] = files
-            print(f"✅ Complete dataset detected: {prefix}")
+            logger.info(f"✅ Complete dataset detected: {prefix}")
         else:
-            print(f"⚠️ Incomplete dataset: {prefix} - missing: {missing}")
+            logger.info(f"⚠️ Incomplete dataset: {prefix} - missing: {missing}")
     return list(complete.keys())
 
 # =========================================================
 # PARSE COMMAND AND SET VARIABLES
 # =========================================================
+# send messages to log
+logger = logging.getLogger("dbbuilder")
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()  # goes to stderr by default
+formatter = logging.Formatter("%(message)s")
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 # greet
-print("=" * 70)
-print("🚀 ATLASMX ITS — DB BUILDER V9.1")
-print("=" * 70)
+logger.info("=" * 70)
+logger.info("🚀 ATLASMX ITS — DB BUILDER V9.1")
+logger.info("=" * 70)
 
 # minimal required arguments
 querydir = Path(config["input_directory"]).expanduser().resolve()
@@ -61,6 +70,10 @@ LOCBASE = discover_datasets(querydir)
 collapse_mode = config.get('collapse_mode', 'all_eukaryotes')
 collapse_strategy = config.get('collapse_strategy', 'species_only')
 pvalue_threshold = float(config.get('p-value_threshold', 1.0))
+
+# optional arguments with default options
+# for r_genus
+r_color_variables = config.get('r_color_variables', 'None')
 
 # optional arguments with default options
 # for subset by taxonomy
@@ -80,14 +93,14 @@ SPPN_P_THRESHOLD = 0.8 # hard coded in scripts
 sppn_tag = f"sppn{SPPN_P_THRESHOLD}".replace(".", "p")
 R_SUFFIX = f"_{collapse_strategy}_{collapse_tag}_{sppn_tag}"
 
-# print parameters
-print("=" * 70)
-print(f"PARAMETERS")
-print(f"mode: {collapse_mode}")
-print(f'strategy: {collapse_strategy}')
-print(f"collapse p ≥ {pvalue_threshold}")
-print(f'sanitize p ≥ {SPPN_P_THRESHOLD}')
-print("=" * 70)
+# print parameters to log
+logger.info("=" * 70)
+logger.info(f"PARAMETERS")
+logger.info(f"mode: {collapse_mode}")
+logger.info(f'strategy: {collapse_strategy}')
+logger.info(f"collapse p ≥ {pvalue_threshold}")
+logger.info(f'sanitize p ≥ {SPPN_P_THRESHOLD}')
+logger.info("=" * 70)
 
 # =========================================================
 # RULE ALL
@@ -104,6 +117,7 @@ if taxonomic_filter != 'None' and taxonomic_rank != 'None':
             str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/abundance_table.csv", # build r
             str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/sequences.fasta", # build r
             str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/fungal_traits_table.csv", # build r
+            str(outdir) + f"/R_out/genus/00_phyloseq_summary_zotu.txt", # r genus
             str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
 else:
     rule all:
@@ -114,6 +128,7 @@ else:
             str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/abundance_table.csv", # build r
             str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/sequences.fasta", # build r
             str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/fungal_traits_table.csv", # build r
+            str(outdir) + f"/R_out/genus/00_phyloseq_summary_zotu.txt", # r genus
             str(outdir) + f"/krona2/{dataset_name}_krona_{collapse_strategy}_{collapse_mode}_p{pvalue_threshold}.csv" # krona
 
 # =========================================================
@@ -299,6 +314,73 @@ NOTE:
     shell:
         """
         python snakes/dbbuilder_build_r.py {params[0]} {params[1]} {params[2]} {params[3]}
+        """
+
+            
+# =========================================================
+    
+rule run_r_genus:
+    """ build_phyloseq_zOTU_genus_prev2_multiNMDS.R README:
+ATLASMX ITS — DB BUILDER V9.1
+
+build_phyloseq_zOTU_genus_prev2_multiNMDS.R
+
+Usage: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R <input_directory> <output_directory> <sample_metadata> <color_vars>
+
+Input directory
+    String indicating the path of the input directory, for example "input"
+Output directory
+    String indicating the path of the output directory, for example "output"
+Sample metadata
+    String indicating the path of the sample metadata table, for example "smd/sample_metadata.csv
+Color variables
+    String or list separated by commas to color NMDS, for example "ecoregion_WWF" or "ecoregion_WWF,vegetacion_CONABIO"
+
+Example: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R input output md/sample_metadata.csv ecoregion_WWF,sequencing_platform
+
+Details:
+Purpose:
+  1) Build a phyloseq object from zOTUs
+  2) Apply the most suitable prevalence filter: prev2
+  3) Collapse taxa at the genus level
+  4) Run NMDS, PERMANOVA, and betadisper
+  5) Allow multiple NMDS runs colored by different metadata variables
+  6) Automatically display figures in RStudio
+  7) Export all outputs to the output/ folder
+
+How to use:
+  - "color_vars" defines which metadata variables will be used to color the NMDS.
+
+Notes:
+  - NMDS figures are automatically exported as PNG and PDF
+  - NMDS figures are also automatically printed to the RStudio Plots panel
+  - If a metadata variable does not exist, the script skips it with a warning
+
+Methodological note incorporated:
+  Previous analyses showed that OTU98 clustering did not sufficiently
+  remove year/platform-associated bias. The best compromise was obtained
+  using prevalence filtering >= 2 samples and genus-level taxonomic collapse,
+  rather than relying on OTU98 clustering.
+    """
+    conda:
+        "snakes/r-libs.yaml"
+    input:
+        str(querydir) + "/sample_metadata.csv",
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/taxonomy.csv", # build r
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/abundance_table.csv", # build r
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/sequences.fasta", # build r
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}/fungal_traits_table.csv" # build r
+    output:
+        str(outdir) + f"/R_out/genus/00_phyloseq_summary_zotu.txt", # r genus
+        str(outdir) + f"/R_out/genus/20_multiNMDS_summary_by_metadata.csv" # r genus
+    params:
+        str(outdir) + f"/For_R/{collapse_mode}{R_SUFFIX}",
+        str(outdir) + f"/R_out/genus",
+        str(querydir) + "/sample_metadata.csv",
+        r_color_variables
+    shell:
+        """
+        Rscript snakes/build_phyloseq_zOTU_genus_prev2_multiNMDS.R {params[0]} {params[1]} {params[2]} {params[3]}
         """
 
             
