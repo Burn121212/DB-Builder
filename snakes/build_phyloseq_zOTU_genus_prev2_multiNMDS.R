@@ -54,7 +54,7 @@ if (is.na(color_vars)) {
                         "Color variables",
                         '    String or list separated by commas to color NMDS, for example "ecoregion_WWF" or "ecoregion_WWF,sequencing_platform"',
                         "",
-                        "Example: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R input output md/sample_metadata.csv ecoregion_WWF,sequencing_platform",
+                        "Example: Rscript build_phyloseq_zOTU_genus_prev2_multiNMDS.R input output smd/sample_metadata.csv ecoregion_WWF,sequencing_platform",
                         "",
                         sep = "\n")
     quit()
